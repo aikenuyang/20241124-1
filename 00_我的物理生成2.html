@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>物理物體生成器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        #info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 16px;
+            font-family: Arial, sans-serif;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">物體數量: 0 | FPS: 0</div>
+    <script>
+        const Engine = Matter.Engine,
+              Render = Matter.Render,
+              Runner = Matter.Runner,
+              Bodies = Matter.Bodies,
+              Composite = Matter.Composite,
+              Mouse = Matter.Mouse,
+              World = Matter.World,
+              Body = Matter.Body;
+
+        const engine = Engine.create();
+        const world = engine.world;
+
+        const render = Render.create({
+            element: document.body,
+            engine: engine,
+            options: {
+                width: window.innerWidth,
+                height: window.innerHeight,
+                wireframes: false
+            }
+        });
+
+        // 建立邊界
+        const walls = [
+            Bodies.rectangle(window.innerWidth/2, 0, window.innerWidth, 60, { isStatic: true }),
+            Bodies.rectangle(window.innerWidth/2, window.innerHeight, window.innerWidth, 60, { isStatic: true }),
+            Bodies.rectangle(0, window.innerHeight/2, 60, window.innerHeight, { isStatic: true }),
+            Bodies.rectangle(window.innerWidth, window.innerHeight/2, 60, window.innerHeight, { isStatic: true })
+        ];
+        World.add(world, walls);
+
+        Render.run(render);
+        const runner = Runner.create();
+        Runner.run(runner, engine);
+
+        let lastSpawnTime = 0;
+        const spawnInterval = 100; // 每0.1秒產生一個物體
+        let frameCount = 0;
+        let lastTime = performance.now();
+        let fps = 0;
+        let currentMousePos = { x: 0, y: 0 };
+
+        function getRandomColor() {
+            const hue = Math.random() * 360;
+            return `hsl(${hue}, 80%, 60%)`;
+        }
+
+        function createRandomShape() {
+            const x = event.clientX;
+            const y = event.clientY;
+            const size = 20 + Math.random() * 30;
+            const shapes = [
+                () => Bodies.rectangle(x, y, size, size, {
+                    render: { fillStyle: getRandomColor() }
+                }),
+                () => Bodies.circle(x, y, size/2, {
+                    render: { fillStyle: getRandomColor() }
+                }),
+                () => Bodies.polygon(x, y, Math.floor(3 + Math.random() * 5), size/2, {
+                    render: { fillStyle: getRandomColor() }
+                }),
+                () => Bodies.trapezoid(x, y, size, size, 0.5, {
+                    render: { fillStyle: getRandomColor() }
+                })
+            ];
+            return shapes[Math.floor(Math.random() * shapes.length)]();
+        }
+
+        document.addEventListener('mousemove', (event) => {
+            currentMousePos.x = event.clientX;
+            currentMousePos.y = event.clientY;
+            
+            if (performance.now() - lastSpawnTime > spawnInterval) {
+                World.add(world, createRandomShape());
+                lastSpawnTime = performance.now();
+            }
+        });
+
+        function updateInfo() {
+            frameCount++;
+            const currentTime = performance.now();
+            if (currentTime - lastTime >= 1000) {
+                fps = frameCount;
+                frameCount = 0;
+                lastTime = currentTime;
+            }
+            document.getElementById('info').textContent = 
+                `物體數量: ${world.bodies.length - 4} | FPS: ${fps}`;
+            requestAnimationFrame(updateInfo);
+        }
+
+        updateInfo();
+
+        function createExplosion(position, radius = 200, force = 0.05) {
+            const bodies = world.bodies.filter(body => !body.isStatic);
+            
+            bodies.forEach(body => {
+                const distance = Matter.Vector.magnitude(Matter.Vector.sub(body.position, position));
+                
+                if (distance < radius) {
+                    const force_magnitude = (1 - distance / radius) * force;
+                    const direction = Matter.Vector.normalise(
+                        Matter.Vector.sub(body.position, position)
+                    );
+                    
+                    Body.applyForce(body, body.position, {
+                        x: direction.x * force_magnitude,
+                        y: direction.y * force_magnitude
+                    });
+                }
+            });
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'Space') {
+                const mousePosition = {
+                    x: currentMousePos.x || window.innerWidth/2,
+                    y: currentMousePos.y || window.innerHeight/2
+                };
+                createExplosion(mousePosition);
+            }
+        });
+    </script>
+</body>
+</html>
